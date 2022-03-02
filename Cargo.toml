@@ -1,0 +1,10 @@
+[package]
+name = "rea"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "playground"
+
+[dependencies]
+state = { version = "0.5.2", features = ["tls"] }
