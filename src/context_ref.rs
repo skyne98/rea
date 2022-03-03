@@ -6,15 +6,16 @@ use crate::{
     data::{Data, DataRef},
 };
 
-#[derive(Clone)]
 pub struct ContextRef {
     context: *mut usize,
+    counter: *mut u64,
 }
 
 impl ContextRef {
     pub fn new() -> Self {
         ContextRef {
             context: Box::into_raw(Box::new(Context::new())) as *mut usize,
+            counter: Box::into_raw(Box::new(1)) as *mut u64,
         }
     }
 
@@ -23,6 +24,9 @@ impl ContextRef {
     }
     pub fn get_context_mut(&mut self) -> &mut Context {
         unsafe { &mut *(self.context as *mut Context) }
+    }
+    pub fn get_counter(&self) -> u64 {
+        unsafe { *(self.counter as *mut u64) }
     }
 
     // Data management
@@ -56,4 +60,28 @@ impl ContextRef {
     }
 }
 
-// WARNING: Currently context is never dropped
+impl Clone for ContextRef {
+    fn clone(&self) -> Self {
+        let copy = ContextRef {
+            context: self.context,
+            counter: self.counter,
+        };
+        unsafe {
+            *(self.counter as *mut u64) += 1;
+        }
+        copy
+    }
+}
+
+impl Drop for ContextRef {
+    fn drop(&mut self) {
+        unsafe {
+            *(self.counter as *mut u64) -= 1;
+            if *(self.counter as *mut u64) == 0 {
+                println!("Dropping context");
+                Box::from_raw(self.context as *mut Context);
+                Box::from_raw(self.counter as *mut u64);
+            }
+        }
+    }
+}
