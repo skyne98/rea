@@ -38,20 +38,20 @@ impl ContextRef {
         self.get_context_mut().computed(self_clone, computed)
     }
     // Generic get and set
-    pub fn get<D: Data>(&self, data_ref: DataRef<D>) -> Option<D> {
+    pub fn get<D: Data>(&mut self, data_ref: DataRef<D>) -> Option<D> {
         if self.get_context().ref_is_data(&data_ref) {
-            self.get_context().get_data(data_ref)
+            self.get_context_mut().get_data(data_ref)
         } else if self.get_context().ref_is_computed(&data_ref) {
-            self.get_context().get_computed(data_ref)
+            self.get_context_mut().get_computed(data_ref)
         } else {
             None
         }
     }
     pub fn set<D: Data>(&mut self, data_ref: DataRef<D>, data: D) -> D {
+        let self_clone = self.clone();
         if self.get_context().ref_is_data(&data_ref) {
-            self.get_context_mut().set_data(data_ref, data)
+            self.get_context_mut().set_data(self_clone, data_ref, data)
         } else if self.get_context().ref_is_computed(&data_ref) {
-            let self_clone = self.clone();
             self.get_context_mut()
                 .set_computed(self_clone, data_ref, data)
         } else {
@@ -78,7 +78,6 @@ impl Drop for ContextRef {
         unsafe {
             *(self.counter as *mut u64) -= 1;
             if *(self.counter as *mut u64) == 0 {
-                println!("Dropping context");
                 Box::from_raw(self.context as *mut Context);
                 Box::from_raw(self.counter as *mut u64);
             }

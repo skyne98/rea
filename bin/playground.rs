@@ -2,22 +2,23 @@ use rea::{context::Context, context_ref::ContextRef};
 
 fn main() {
     let mut context = ContextRef::new();
-    let counter = context.data(0);
-    let old_counter = context.set(counter, 1);
-    println!(
-        "Updated counter from {} to {}",
-        old_counter,
-        context.get(counter).unwrap()
-    );
-    let old_counter = context.set(counter, 2);
-    println!(
-        "Updated counter from {} to {}",
-        old_counter,
-        context.get(counter).unwrap()
-    );
-
-    let counter_double =
-        context.computed(move |context: ContextRef| context.get(counter).unwrap() * 2);
-    println!("Computed created");
-    println!("Counter double is {}", context.get(counter_double).unwrap());
+    let skip_first_name = context.data(true);
+    let first_name = context.data("Hello".to_string());
+    let last_name = context.data("World".to_string());
+    let full_name = context.computed(move |mut context: ContextRef| {
+        if context.get(skip_first_name).unwrap() {
+            context.get(last_name).unwrap()
+        } else {
+            let first_name = context.get(first_name).unwrap();
+            let last_name = context.get(last_name).unwrap();
+            format!("{} {}", first_name, last_name)
+        }
+    });
+    println!("Full name is: {}", context.get(full_name).unwrap());
+    context.set(skip_first_name, false);
+    println!("Full name is: {}", context.get(full_name).unwrap());
+    context.set(first_name, "Rea".to_string());
+    println!("Full name is: {}", context.get(full_name).unwrap());
+    context.set(skip_first_name, true);
+    println!("Full name is: {}", context.get(full_name).unwrap());
 }
