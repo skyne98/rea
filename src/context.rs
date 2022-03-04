@@ -1,6 +1,4 @@
 use std::{
-    any::TypeId,
-    cell::{Ref, RefCell},
     collections::{HashMap, HashSet},
     marker::PhantomData,
 };
@@ -8,17 +6,19 @@ use std::{
 use crate::{
     computed::{Computed, ComputedStore},
     context_ref::ContextRef,
-    data::{Data, DataRef, DataStore},
+    data::Data,
+    reference::Ref,
+    value::ValueStore,
 };
 
 pub struct Context {
     pub next_id: usize,
 
     // Data properties
-    data: HashMap<usize, DataStore>,
+    values: HashMap<usize, ValueStore>,
     // Computed properties
     computed: HashMap<usize, ComputedStore>,
-    computed_data: HashMap<usize, DataStore>,
+    computed_data: HashMap<usize, ValueStore>,
     currently_computing: Vec<usize>,
     // Dependencies
     dependencies: HashMap<usize, HashSet<usize>>,
@@ -28,7 +28,7 @@ impl Context {
     pub fn new() -> Self {
         Context {
             next_id: 0,
-            data: HashMap::new(),
+            values: HashMap::new(),
             computed: HashMap::new(),
             computed_data: HashMap::new(),
             currently_computing: Vec::new(),
@@ -42,11 +42,11 @@ impl Context {
         id
     }
 
-    pub fn ref_is_data<D: Data>(&self, ref_: &DataRef<D>) -> bool {
-        self.data.contains_key(&ref_.id)
+    pub fn id_is_value(&self, id: usize) -> bool {
+        self.values.contains_key(&id)
     }
-    pub fn ref_is_computed<D: Data>(&self, ref_: &DataRef<D>) -> bool {
-        self.computed.contains_key(&ref_.id)
+    pub fn id_is_computed(&self, id: usize) -> bool {
+        self.computed.contains_key(&id)
     }
 
     pub fn add_dependency_if_computing(&mut self, dependency: usize) {
@@ -59,10 +59,6 @@ impl Context {
                 .entry(currently_computing_id)
                 .or_insert_with(HashSet::new)
                 .insert(dependency);
-            println!(
-                "[rea] Now {} depends on {}",
-                currently_computing_id, dependency
-            );
         }
     }
     pub fn trigger_compute_if_dependency_is_set(
@@ -80,41 +76,29 @@ impl Context {
 
         // Compute
         for id in to_compute {
-            println!(
-                "[rea] Dependency {} is set, triggering compute {}",
-                dependency, id
-            );
             self.computed_execute_getter(context_ref.clone(), id);
         }
     }
 
-    // Data management
-    pub fn data<D: Data>(&mut self, data: D) -> DataRef<D> {
+    // Value management
+    pub fn value<D: Data>(&mut self, data: D) -> Ref<D> {
         let id = self.next_id();
-        let data_store = DataStore::new(data);
-        self.data.insert(id, data_store);
-        DataRef {
-            id,
-            phantom: PhantomData,
-        }
+        let data_store = ValueStore::new(data);
+        self.values.insert(id, data_store);
+        Ref::new(id)
     }
-    pub fn get_data<D: Data>(&mut self, data_ref: DataRef<D>) -> Option<D> {
-        self.add_dependency_if_computing(data_ref.id);
-        self.data
-            .get(&data_ref.id)
+    pub fn get_value<D: Data>(&mut self, id: Ref<D>) -> Option<D> {
+        self.add_dependency_if_computing(id.id);
+        self.values
+            .get(&id.id)
             .and_then(|data_store| data_store.get_cloned_ref())
     }
-    pub fn set_data<D: Data>(
-        &mut self,
-        context_ref: ContextRef,
-        data_ref: DataRef<D>,
-        data: D,
-    ) -> D {
+    pub fn set_value<D: Data>(&mut self, context_ref: ContextRef, id: Ref<D>, data: D) -> D {
         let old_data = self
-            .data
-            .insert(data_ref.id, DataStore::new(data))
+            .values
+            .insert(id.id, ValueStore::new(data))
             .expect("Old data not found on set");
-        self.trigger_compute_if_dependency_is_set(context_ref, data_ref.id);
+        self.trigger_compute_if_dependency_is_set(context_ref, id.id);
         old_data.get().unwrap()
     }
 
@@ -123,41 +107,26 @@ impl Context {
         &mut self,
         context_ref: ContextRef,
         computed: C,
-    ) -> DataRef<D> {
+    ) -> Ref<D> {
         let id = self.next_id();
         let computed_store = ComputedStore::new(computed);
         self.computed.insert(id, computed_store);
-        let data_ref = DataRef {
-            id,
-            phantom: PhantomData,
-        };
-        self.computed_execute_getter(context_ref, data_ref.id);
-        data_ref
+        let id = Ref::new(id);
+        self.computed_execute_getter(context_ref, id.id);
+        id
     }
-    pub fn get_computed<D: Data>(&mut self, data_ref: DataRef<D>) -> Option<D> {
-        self.add_dependency_if_computing(data_ref.id);
+    pub fn get_computed<D: Data>(&mut self, id: Ref<D>) -> Option<D> {
+        self.add_dependency_if_computing(id.id);
         self.computed_data
-            .get(&data_ref.id)
-            .and_then(|computed_store| {
-                println!(
-                    "[rea] Get computed {} with value of {:?}",
-                    data_ref.id,
-                    computed_store.get_cloned_ref::<D>().unwrap()
-                );
-                computed_store.get_cloned_ref()
-            })
+            .get(&id.id)
+            .and_then(|computed_store| computed_store.get_cloned_ref())
     }
-    pub fn set_computed<D: Data>(
-        &mut self,
-        context_ref: ContextRef,
-        data_ref: DataRef<D>,
-        data: D,
-    ) -> D {
-        let new_data = DataStore::new(data);
-        self.computed_execute_setter::<D>(context_ref, data_ref.id, &new_data);
+    pub fn set_computed<D: Data>(&mut self, context_ref: ContextRef, id: Ref<D>, data: D) -> D {
+        let new_data = ValueStore::new(data);
+        self.computed_execute_setter::<D>(context_ref, id.id, &new_data);
         let old_data = self
             .computed_data
-            .insert(data_ref.id, new_data)
+            .insert(id.id, new_data)
             .expect("Old data not found on set");
         old_data.get().unwrap()
     }
@@ -176,7 +145,7 @@ impl Context {
         &mut self,
         context_ref: ContextRef,
         id: usize,
-        data: &DataStore,
+        data: &ValueStore,
     ) {
         let computed_store = self
             .computed

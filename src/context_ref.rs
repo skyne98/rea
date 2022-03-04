@@ -1,10 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
-
-use crate::{
-    computed::Computed,
-    context::Context,
-    data::{Data, DataRef},
-};
+use crate::{computed::Computed, context::Context, data::Data, reference::Ref};
 
 pub struct ContextRef {
     context: *mut usize,
@@ -22,38 +16,44 @@ impl ContextRef {
     pub fn get_context(&self) -> &Context {
         unsafe { &*(self.context as *mut Context) }
     }
-    pub fn get_context_mut(&mut self) -> &mut Context {
+    pub fn get_context_mut(&self) -> &mut Context {
         unsafe { &mut *(self.context as *mut Context) }
     }
     pub fn get_counter(&self) -> u64 {
         unsafe { *(self.counter as *mut u64) }
     }
 
-    // Data management
-    pub fn data<D: Data>(&mut self, data: D) -> DataRef<D> {
-        self.get_context_mut().data(data)
+    pub fn id_is_value(&self, id: usize) -> bool {
+        self.get_context().id_is_value(id)
     }
-    pub fn computed<D: Data, C: Computed<D> + 'static>(&mut self, computed: C) -> DataRef<D> {
+    pub fn id_is_computed(&self, id: usize) -> bool {
+        self.get_context().id_is_computed(id)
+    }
+
+    // Data management
+    pub fn value<D: Data>(&self, data: D) -> Ref<D> {
+        self.get_context_mut().value(data)
+    }
+    pub fn computed<D: Data, C: Computed<D> + 'static>(&self, computed: C) -> Ref<D> {
         let self_clone = self.clone();
         self.get_context_mut().computed(self_clone, computed)
     }
     // Generic get and set
-    pub fn get<D: Data>(&mut self, data_ref: DataRef<D>) -> Option<D> {
-        if self.get_context().ref_is_data(&data_ref) {
-            self.get_context_mut().get_data(data_ref)
-        } else if self.get_context().ref_is_computed(&data_ref) {
-            self.get_context_mut().get_computed(data_ref)
+    pub fn get<D: Data>(&self, id: Ref<D>) -> Option<D> {
+        if self.id_is_value(id.id) {
+            self.get_context_mut().get_value(id)
+        } else if self.id_is_computed(id.id) {
+            self.get_context_mut().get_computed(id)
         } else {
             None
         }
     }
-    pub fn set<D: Data>(&mut self, data_ref: DataRef<D>, data: D) -> D {
+    pub fn set<D: Data>(&self, id: Ref<D>, data: D) -> D {
         let self_clone = self.clone();
-        if self.get_context().ref_is_data(&data_ref) {
-            self.get_context_mut().set_data(self_clone, data_ref, data)
-        } else if self.get_context().ref_is_computed(&data_ref) {
-            self.get_context_mut()
-                .set_computed(self_clone, data_ref, data)
+        if self.id_is_value(id.id) {
+            self.get_context_mut().set_value(self_clone, id, data)
+        } else if self.id_is_computed(id.id) {
+            self.get_context_mut().set_computed(self_clone, id, data)
         } else {
             data
         }
@@ -82,5 +82,17 @@ impl Drop for ContextRef {
                 Box::from_raw(self.counter as *mut u64);
             }
         }
+    }
+}
+
+impl AsRef<Context> for ContextRef {
+    fn as_ref(&self) -> &Context {
+        self.get_context()
+    }
+}
+
+impl AsRef<ContextRef> for ContextRef {
+    fn as_ref(&self) -> &ContextRef {
+        self
     }
 }

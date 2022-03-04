@@ -1,9 +1,6 @@
 use std::{borrow::Borrow, cell::RefCell, rc::Rc};
 
-use crate::{
-    context_ref::ContextRef,
-    data::{Data, DataStore},
-};
+use crate::{context_ref::ContextRef, data::Data, value::ValueStore};
 
 // Trait with getter and optional setter
 pub trait Computed<D: Data> {
@@ -41,8 +38,8 @@ where
 
 // Computed store (like DataStore)
 pub(crate) struct ComputedStore {
-    getter: Box<dyn Fn(ContextRef) -> DataStore>,
-    setter: Option<Box<dyn Fn(ContextRef, &DataStore)>>,
+    getter: Box<dyn Fn(ContextRef) -> ValueStore>,
+    setter: Option<Box<dyn Fn(ContextRef, &ValueStore)>>,
 }
 
 impl ComputedStore {
@@ -52,16 +49,16 @@ impl ComputedStore {
         let setter_ref = Rc::clone(&computed_ref);
 
         ComputedStore {
-            getter: Box::new(move |context| DataStore::new(getter_ref.get(context))),
+            getter: Box::new(move |context| ValueStore::new(getter_ref.get(context))),
             setter: Some(Box::new(move |context, data| {
                 setter_ref.set(context, data.get_cloned_ref().unwrap());
             })),
         }
     }
-    pub fn get(&self, context: ContextRef) -> DataStore {
+    pub fn get(&self, context: ContextRef) -> ValueStore {
         (self.getter)(context)
     }
-    pub fn set(&self, context: ContextRef, data: &DataStore) {
+    pub fn set(&self, context: ContextRef, data: &ValueStore) {
         if let Some(setter) = self.setter.as_ref() {
             (setter)(context, data);
         }
