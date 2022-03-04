@@ -1,5 +1,16 @@
 # Rea 🔥
 > Library that brings simplicity of state management in Vue.js into the world of Rust 🦀
+
+## Features
+* Fully statically typed
+* Automatic dependency detection and reactivity
+* Value properties
+* Cached computed properties (*with optional setters*)
+
+## Quirks
+* Values need to implement `Clone`
+* Not thread-safe
+
 ```rust
 // from bin/playground.rs
 
