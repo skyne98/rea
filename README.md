@@ -1,4 +1,4 @@
-# Rea 🔥
+# rea 🔥
 > Library that brings simplicity of state management in Vue.js into the world of Rust 🦀
 
 ## Features
